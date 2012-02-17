@@ -1,0 +1,10 @@
+       --- The slowest ext2 driver ever ---
+
+This is a collection of low-level classes for inspecting ext2 
+internals. In order to use it effectively you need understanding
+the ext2 data layout. The main goal of this tool is to be a tool 
+for manual manipulation on an ext2 filesystem (possibly broken or 
+nonstandard).
+
+Class ext2fs tries to provide user-friendly and abstract interface to 
+filesystem manipulation routines. 
