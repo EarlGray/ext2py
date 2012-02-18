@@ -5,14 +5,14 @@ __author__ = 'dmytrish'
 __version__ = '0.1'
 
 """
-This is a collection of low-level classes for inspecting ext2 
+This is a collection of low-level classes for inspecting ext2
 internals. In order to use it effectively you need understanding
-the ext2 data layout. The main goal of this tool is to be a tool 
-for manual manipulation on an ext2 filesystem (possibly broken or 
+the ext2 data layout. The main goal of this tool is to be a tool
+for manual manipulation on an ext2 filesystem (possibly broken or
 nonstandard).
 
-Class ext2fs tries to provide user-friendly and abstract interface to 
-filesystem manipulation routines. 
+Class ext2fs tries to provide user-friendly and abstract interface to
+filesystem manipulation routines.
 How to start (see ext2.ext2fs.__doc__ for details):
 
 >>> import ext2
@@ -24,16 +24,16 @@ Getting information about FS:
 >>> print e2.sb.uuid, e2.sb.name
 
 List a directory on the FS:
->>> print e2.list_dir('')  # root directory of the FS
->>> print e2.list_dir('/') # the same
->>> print e2.list_dir('linux/fs/ext2') 
->>> print e2.list_dir('/boot/grub')
+>>> print e2.ls('')  # root directory of the FS
+>>> print e2.ls('/') # the same
+>>> print e2.ls('linux/fs/ext2')
+>>> print e2.ls('/boot/grub')
 
 Copy file to and fro:
 >>> e2.pull('boot/grub/menu.lst', '.')
 >>> e2.push('~/code/py/ext2', '/src/')
 
-(l) License: beerware. 
+(l) License: beerware.
 You use this script at your own peril and must not moan for its speed.
 """
 
@@ -54,8 +54,8 @@ def unpack_struct(fmt, strct, s):
     val_tuple = struct.unpack( fmt, s[:struct.calcsize(fmt)] )
     return dict( zip(strct, val_tuple) )
 
-def time_format(unix_time): 
-    return time.strftime('%D %T', time.localtime(unix_time))
+def time_format(unix_time):
+    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(unix_time))
 
 class Ext2Exception(Exception):
     def __init__(self, msg):
@@ -67,20 +67,23 @@ class e2dentry:
     d_fmt = 'IHBB'
     fmt_size = struct.calcsize(d_fmt)
     d_flds = ('d_inode', 'd_entry_size', 'd_namelen', 'd_filetype' )
-    stattype = [ 0, stat.S_IFREG, stat.S_IFDIR, stat.S_IFCHR, 
+    stattype = [ 0, stat.S_IFREG, stat.S_IFDIR, stat.S_IFCHR,
                  stat.S_IFBLK, stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFLNK ]
 
     def __init__(self, fs):
         byte_array = fs.f.read( self.fmt_size )
         self.d = unpack_struct(self.d_fmt, self.d_flds, byte_array)
         self.inode = self.d['d_inode']
-        
+
         raw_name_size = self.d['d_entry_size'] - struct.calcsize(self.d_fmt)
         raw_name = fs.f.read( raw_name_size )
         self.name = struct.unpack(str(raw_name_size) + 's', raw_name)[0]
         self.name = self.name.strip('\0')[ : self.d['d_namelen'] ]
 
-        self.ftype = self.stattype[ self.d['d_filetype'] ]
+        try: self.ftype = self.stattype[ self.d['d_filetype'] ]
+        except KeyError:
+            raise Ext2Exception(
+                'Invalid file type %d for dentry %s' % (e.ftype, e.name))
 
 
 class e2directory:
@@ -88,7 +91,7 @@ class e2directory:
         if not inode.is_directory():
             raise Ext2Exception('Not a directory: ' % inode.name)
         ## TODO: directory might be more than 1 block
-        fs._go_to_block( inode.d['i_db0'])  
+        fs._go_to_block( inode.d['i_db0'])
         self.ent = []
         bytes_read = 0
         while bytes_read < fs._blksz:
@@ -122,6 +125,8 @@ class e2inode:
             'i_db6', 'i_db7', 'i_db8', 'i_db9', 'i_db10', 'i_db11',
         # single-, double-, tripple- indirect block pointers
         'i_i1b', 'i_i2b', 'i_i3b' )
+    EXT2_NDIR_BLOCKS = 12
+    EXT2_N_BLOCKS = 15
 
     def __init__(self, fs):
         self.i_size = fs._indsz
@@ -131,11 +136,11 @@ class e2inode:
         self.gid = self.d['i_gid']
         self.n_length = self.d['i_size']
         self.mode = self.d['i_mode']
-        
+
     def get_mode(self):
         rights = ''
         for i in range(9):
-            if (1 << (8 - i)) & self.mode: 
+            if (1 << (8 - i)) & self.mode:
                 rights += stat_full_rights[i]
             else: rights += '-'
         return stat_filetype[ stat.S_IFMT(self.mode) ] + rights
@@ -143,20 +148,42 @@ class e2inode:
     def is_directory(self):
         return stat.S_IFMT(self.mode) == stat.S_IFDIR
 
+    def is_device(self):
+        return stat.S_IFMT(self.mode) in (stat.S_IFCHR, stat.S_IFBLK)
+
     def blocks_list(self):
         blocks = []
-        for i in range(12):
+        for i in range( e2inode.EXT2_N_BLOCKS ):
             block_num = self.d['i_db' + str(i)]
             if block_num == 0: return blocks
             blocks.append(block_num)
-        
+
         return blocks
+
+    def blocks_as_string(self):
+        """ this method is used for reading in-place links, up to 60 chars """
+        s = ''
+        for i in range( e2inode.EXT2_N_BLOCKS ):
+            if i < e2inode.EXT2_NDIR_BLOCKS:
+                b = self.d['i_db' + str(i)]
+            else:
+                b = self.d['i_i%db' % (1 + i - e2inode.EXT2_NDIR_BLOCKS)]
+            if b == 0: break
+            s += struct.pack('I', b)
+        return s.strip('\0')
+
+    def device_id(self):
+        dev = self.d['i_db0']
+        return (os.major(dev), os.minor(dev))
 
     def __str__(self):
         res = self.get_mode()
         res += ' %3d' % self.d['i_links_count']
         res += ' %4d:%d\t' % (self.uid, self.gid)
-        res += ' %10d' % self.n_length
+        if self.is_device():  # devices need DevID formatting
+            res += '     (%2d,%2d)' % self.device_id()
+        else:
+            res += ' %10d' % self.n_length
         res += ' %s' % time_format(self.d['i_ctime'])
         return res
 
@@ -173,7 +200,7 @@ class e2group_descriptor:
             raise Ext2Exception('Bad %s block %d for block_group_desc[%d]' %
                 (description, x, self.index))
 
-    def check(self):   
+    def check(self):
         self.check_range(self.block_bitmap, 'blockbitmap')
         self.check_range(self.inode_bitmap, 'inodebitmap')
         self.check_range(self.inode_table, 'inodetable')
@@ -185,12 +212,12 @@ class e2group_descriptor:
         self.block_bitmap = self.d['bg_block_bitmap']
         self.inode_bitmap = self.d['bg_inode_bitmap']
         self.inode_table = self.d['bg_inode_table']
-        
+
         self.start = fs.sb.boot_block + self.index * fs.sb.blocks_in_grp
         self.end = self.start + fs.sb.blocks_in_grp
 
         self.check()
-        
+
 
 class e2superblock:
     file_offset = 1024
@@ -217,7 +244,7 @@ class e2superblock:
         srcfile.seek( self.file_offset )
         byte_array = srcfile.read( self.sb_size )
         self.d = unpack_struct(self.sb_fmt, self.sb_keys, byte_array)
-        if self.d['s_magic'] != self.ext2magic: 
+        if self.d['s_magic'] != self.ext2magic:
             raise Ext2Exception('Invalid ext2 superblock: the magic is bad')
 
         self.blksz = 1024 << self.d['s_log_block_size']
@@ -230,9 +257,9 @@ class e2superblock:
         self.boot_block = self.d['s_first_data_block']
         self.name = str( self.d['s_volume_name']).strip('\0' )
         self.uuid = str( uuid.UUID(bytes = self.d['s_uuid']) )
-        
+
         self.check()
-        
+
     def check(self):
         pass
 
@@ -240,7 +267,7 @@ class e2superblock:
         res = ''
         for k in self.d:
             v = str(self.d[k])
-            if k == 's_uuid': 
+            if k == 's_uuid':
                 v = self.uuid
             elif k in ('s_lastcheck', 's_wtime'):
                 v = time_format(self.d[k])
@@ -261,7 +288,7 @@ class ext2fs:
     def __init__(self, filename):
         self.f = open(filename)
         self.sb = e2superblock(self.f)
-        
+
         self._blksz = self.sb.block_size()
         self._indsz = self.sb.inode_size()
 
@@ -270,7 +297,7 @@ class ext2fs:
 
     def umount(self):
         self.f.close()
-        
+
     def _go_to_block(self, num):
         self.f.seek(num * self._blksz)
 
@@ -285,7 +312,7 @@ class ext2fs:
 
         self._go_to_block( 1 + self.sb.boot_block )
         bgd = []
-        for i in range( self._n_blkgrps ): 
+        for i in range( self._n_blkgrps ):
             bgd.append( e2group_descriptor(self) )
         return bgd
 
@@ -309,8 +336,8 @@ class ext2fs:
                 raise Ext2Exception(
                     'Name lookup failed for "%s" in "%s"' % (fname, pathto))
             inode = self._inode(dentry.inode)
-        return dentry 
-    
+        return dentry
+
     def _inode_by_path(self, pathto):
         """ return e2inode for path 'pathto' """
         path_array = pathto.split('/')
@@ -330,33 +357,41 @@ class ext2fs:
 
     def free_space_bytes(self):
         return self.sb.n_free_blocks * self._blksz
-    
+
     def space_bytes(self):
         return self.sb.n_blocks * self._blksz
 
-    def list_dir(self, pathname):
+    def ls(self, pathname, opts=''):
+        """ lists files in 'pathname' like 'ls -l'
+            The second argument controls listing format, options:
+            'i' - output inodes, e.g. fs.ls('dir/subdir', 'i')
+        """
+        def print_dentry(dentry):
+            if opts.count('i'):
+                print self._inode(e.inode), '%8d' % e.inode, e.name
+            else: print self._inode(e.inode), e.name
+
         inode = self._inode_by_path(pathname)
         if inode.is_directory():
             d = e2directory(self, inode)
-            for e in d.ent:
-                print self._inode(e.inode), e.name
+            for e in d.ent: print_dentry(e)
         else:
             print inode
 
     def pull(self, fspath, to_file):
         """ copy file from ext2 image at 'fspath' to external file 'to_file' """
         inode = self._inode_by_path(fspath)
-        try: 
+        try:
             st = os.stat(to_file)
             if stat.S_IFDIR == stat.S_IFMT(st.st_mode):
                 to_file += '/' + fspath.split('/')[-1]
         except OSError: pass
-        
+
         bytes_written = 0
         destination = open(to_file, 'w')
         for block in inode.blocks_list():
             bytes_to_copy = min(inode.n_length - bytes_written, self._blksz)
-            if bytes_to_copy <= 0: 
+            if bytes_to_copy <= 0:
                 raise Ext2Exception('Redundant blocks in file %s' % path)
                 destination.close()
                 os.remove(to_file)
@@ -365,11 +400,24 @@ class ext2fs:
             bytes_written += bytes_to_copy
         destination.close()
 
+    def readlink(self, path):
+        inode = self._inode_by_path(path)
+        if inode.n_length <= struct.calcsize('I') * e2inode.EXT2_N_BLOCKS:
+            # in-place link, less than or equal to 60 characters
+            return inode.blocks_as_string()
+        #else: long link with its own blocks
+        s = ''
+        for b in inode.blocks_list():
+            sb = self._read_block(b)
+            s += sb.split('\0')[0]
+            if sb.count('\0'): break
+        return s
+
     def push_file(self, from_file, to_fspath):
         """ write an external file 'from_file' to ext2 path 'fspath' """
         ### TODO
         pass
-        
+
 if '__main__' == __name__:
     import sys
     if len(sys.argv) < 2:
