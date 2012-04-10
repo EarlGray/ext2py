@@ -34,11 +34,12 @@ class e2fuse(fuse.Fuse):
         self.log('getattr("%s")' % path)
         try: ent = self.fs._ent_by_path(path)
         except Ext2Exception:
-            self.log('getattr: failed to find %s' % path)
+            self.log('getattr: no "%s"' % path)
             return -errno.ENOENT
         
-        self.log('getattr inode = %d', ent.inode)
+        self.log('  inode = %d' % ent.inode)
         ino = self.fs._inode(ent.inode)
+
         st = fuse.Stat()
     
         st.st_atime = ino.d['i_atime']
@@ -52,26 +53,18 @@ class e2fuse(fuse.Fuse):
         st.st_nlink = ino.nlink
         st.st_size = ino.n_length
         st.st_dev = 0
-        self.log('getattr: ino = %d' % ino)
-        #self.log('getattr info: ' + .__str__)
+        # self.log('  info: ' + str(dict(st)))
         return st 
 
     def readdir(self, path, offset):
         self.log('readdir("%s")' % path)
-        dirents = [ '.', '..' ]
-        try: dir_ino = self.fs._inode_by_path(path)
-        except Ext2Exception(e):
-             self.log('readdir: No inode for path')
-             yield -errno.ENOENT
+        dir_ino = self.fs._inode_by_path(path)
+        d = e2directory(self.fs, dir_ino)
 
-        try: d = e2directory(self.fs, dir_ino)
-        except Ext2Exception(e): 
-            self.log('readdir: inode is not a directory')
-            yield -errno.ENOTDIR
-
-        for de in d.ent:
-            dirents.append(de.name)
+        dirents = []
+        for de in d.ent: dirents.append(de.name)
         
+        self.log('  entries: %s' % str(dirents))
         for r in dirents:
             yield fuse.Direntry(r)
 
@@ -99,6 +92,10 @@ class e2fuse(fuse.Fuse):
 
     def open(self, path, flags):
         self.log('open(%s)' % path)
+        return -errno.ENOSYS
+
+    def access(self, path, mode):
+        self.log('access(%s, 0%o)' % (path, mode))
         return -errno.ENOSYS
 
     def truncate(self, path, size):

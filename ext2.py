@@ -326,6 +326,9 @@ class ext2fs:
         return e2inode(self)
 
     def _ent_by_path(self, pathto):
+        if pathto == '/':
+            return e2directory(self, self.root).ent_by_name('.')
+
         path_array = pathto.split('/')
         while path_array.count(''): path_array.remove('')
 
@@ -340,6 +343,9 @@ class ext2fs:
         return dentry
 
     def _inode_by_path(self, pathto):
+        if pathto == '/':
+            return self.root
+
         """ return e2inode for path 'pathto' """
         path_array = pathto.split('/')
         while path_array.count(''): path_array.remove('')
