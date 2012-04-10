@@ -26,7 +26,7 @@ def hexdump(raw_string, start_at=0):
         if 0 == i % bytes_per_block: s += ' '
         s += '%02x ' % ord(b)
 
-        if b in string.printable: asc += b
+        if b in string.printable and ord(b) >= 0x10: asc += b
         else: asc += nonprintable
 
         i += 1

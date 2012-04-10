@@ -136,6 +136,7 @@ class e2inode:
         self.gid = self.d['i_gid']
         self.n_length = self.d['i_size']
         self.mode = self.d['i_mode']
+        self.nlink = self.d['i_links_count']
 
     def get_mode(self):
         rights = ''
