@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import fuse
 import errno
 import sys
@@ -17,11 +18,11 @@ $ e2fuse.py <image/file> <mount/dir>
 class e2fuse(fuse.Fuse):
     def __init__(self, *args, **kw):
         fuse.Fuse.__init__(self, *args, **kw)
-        self.ro = True
         self.logfile = open('/tmp/e2fuse.log', 'w')
         self.log('Starting e2fuse...')
 
     def fsinit(self):
+        self.ro = self.conf['ro']
         imgf = self.cmdline[1][0]
         if imgf[0] is not '/': imgf = self.cwd + '/' + imgf
         try:
@@ -50,8 +51,8 @@ class e2fuse(fuse.Fuse):
         st.st_mtime = ino.d['i_mtime']
 
         st.st_ino = ent.inode
-        st.st_uid = ino.uid
-        st.st_gid = ino.gid
+        if self.conf['user']: (st.st_uid, st.st_gid) = (os.getuid(), os.getgid()) 
+        else: (st.st_uid, st.st_gid) = (ino.uid, ino.gid)
         st.st_mode = ino.mode
         st.st_nlink = ino.nlink
         st.st_size = ino.n_length
@@ -99,7 +100,10 @@ class e2fuse(fuse.Fuse):
 
     def access(self, path, mode):
         self.log('access(%s, 0%o)' % (path, mode))
-        return -errno.ENOSYS
+        try: ino = self._inode_by_path(path)
+        except Exception:
+            return False
+        return True
 
     def truncate(self, path, size):
         self.log('truncate(%s, %d)' % (path, size))
@@ -148,10 +152,16 @@ class e2fuse(fuse.Fuse):
 
 
 def main(argv):
-    import os
     fsserv = e2fuse(version="%prog " + fuse.__version__, usage=usage, dash_s_do='setsingle')
+    fsserv.parser.add_option(mountopt='user')
     fsserv.parse(values=fsserv, errex=1)
     fsserv.cwd = os.getcwd()
+
+    # config
+    fsserv.conf = dict()
+    fsserv.conf['ro'] = True
+    fsserv.conf['user'] = ('user' in fsserv.fuse_args.optlist)
+
     try: print fsserv.fuse_args.mount_expected()
     except OSError:
         print >> sys.stderr, "Mount expected failed"
