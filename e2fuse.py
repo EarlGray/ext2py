@@ -20,12 +20,15 @@ class e2fuse(fuse.Fuse):
         self.ro = True
         self.logfile = open('/tmp/e2fuse.log', 'w')
         self.log('Starting e2fuse...')
-        print args, kw
+
+    def fsinit(self):
+        imgf = self.cmdline[1][0]
+        if imgf[0] is not '/': imgf = self.cwd + '/' + imgf
         try:
-            self.fs = ext2fs('/home/mithra/code/cosec/cosec.img')
+            self.fs = ext2fs(imgf)
             self.log('mounted successfully')
         except Exception:
-            self.log('e2fuse() failed');
+            self.log('ext2fs(%s) failed' % imgf);
        
     def log(self, msg):
         self.logfile.write(msg + '\n')
@@ -145,9 +148,10 @@ class e2fuse(fuse.Fuse):
 
 
 def main(argv):
+    import os
     fsserv = e2fuse(version="%prog " + fuse.__version__, usage=usage, dash_s_do='setsingle')
-    fsserv.parser.add_option(mountopt='img', default='', help='set /path/to/ext2/image')
     fsserv.parse(values=fsserv, errex=1)
+    fsserv.cwd = os.getcwd()
     try: print fsserv.fuse_args.mount_expected()
     except OSError:
         print >> sys.stderr, "Mount expected failed"
