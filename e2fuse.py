@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import os
-import fuse
 import errno
 import sys
+import fuse
 
 from ext2 import *
 
@@ -11,7 +11,7 @@ fuse.fuse_python_api = (0, 2)
 
 usage = '''
 ext2 fuse filesystem
-Usage: 
+Usage:
 $ e2fuse.py <image/file> <mount/dir>
 ''' + fuse.Fuse.fusage
 
@@ -30,35 +30,35 @@ class e2fuse(fuse.Fuse):
             self.log('mounted successfully')
         except Exception:
             self.log('ext2fs(%s) failed' % imgf);
-       
+
     def log(self, msg):
         self.logfile.write(msg + '\n')
-        
+
     def getattr(self, path):
         self.log('getattr("%s")' % path)
         try: ent = self.fs._ent_by_path(path)
         except Ext2Exception:
             self.log('getattr: no "%s"' % path)
             return -errno.ENOENT
-        
+
         self.log('  inode = %d' % ent.inode)
         ino = self.fs._inode(ent.inode)
 
         st = fuse.Stat()
-    
+
         st.st_atime = ino.d['i_atime']
         st.st_ctime = ino.d['i_ctime']
         st.st_mtime = ino.d['i_mtime']
 
         st.st_ino = ent.inode
-        if self.conf['user']: (st.st_uid, st.st_gid) = (os.getuid(), os.getgid()) 
+        if self.conf['user']: (st.st_uid, st.st_gid) = (os.getuid(), os.getgid())
         else: (st.st_uid, st.st_gid) = (ino.uid, ino.gid)
         st.st_mode = ino.mode
         st.st_nlink = ino.nlink
         st.st_size = ino.n_length
         st.st_dev = 0
         # self.log('  info: ' + str(dict(st)))
-        return st 
+        return st
 
     def readdir(self, path, offset):
         self.log('readdir("%s")' % path)
@@ -67,7 +67,7 @@ class e2fuse(fuse.Fuse):
 
         dirents = []
         for de in d.ent: dirents.append(de.name)
-        
+
         self.log('  entries: %s' % str(dirents))
         for r in dirents:
             yield fuse.Direntry(r)
@@ -84,7 +84,9 @@ class e2fuse(fuse.Fuse):
 
     def read(self, path, size, offset):
         self.log('read(%s, %d, %d)' % (path, size, offset))
-        return -errno.ENOSYS
+        try: return self.fs.read(path, offset, size)
+        except Exception:
+            return ''
 
     def write(self, path, buf, offset):
         self.log('write(%s, %d, %d)' % (path, len(buf), offset))
@@ -100,7 +102,7 @@ class e2fuse(fuse.Fuse):
 
     def access(self, path, mode):
         self.log('access(%s, 0%o)' % (path, mode))
-        try: ino = self._inode_by_path(path)
+        try: ino = self.fs._inode_by_path(path)
         except Exception:
             return False
         return True
@@ -145,7 +147,7 @@ class e2fuse(fuse.Fuse):
     def statvfs(self):
         self.log('statvfs()')
         return -errno.ENOSYS
-        
+
     def statfs(self, path):
         self.log('statfs(%s)' % path)
         return -errno.ENOSYS

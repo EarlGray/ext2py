@@ -49,10 +49,15 @@ stat_filetype = {
     stat.S_IFCHR: 'c', stat.S_IFBLK: 'b', stat.S_IFSOCK: 's',
     stat.S_IFIFO: 'p' }
 
+struct.intsz = struct.calcsize('I')
+
 
 def unpack_struct(fmt, strct, s):
     val_tuple = struct.unpack( fmt, s[:struct.calcsize(fmt)] )
     return dict( zip(strct, val_tuple) )
+
+def unpack_int_at(s, index):
+    return struct.unpack_from('1I', s, index * struct.intsz)[0]
 
 def time_format(unix_time):
     return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(unix_time))
@@ -132,11 +137,61 @@ class e2inode:
         self.i_size = fs._indsz
         byte_array = fs.f.read(self.i_size)
         self.d = unpack_struct(self.i_fmt, self.i_flds, byte_array)
+
         self.uid = self.d['i_uid']
         self.gid = self.d['i_gid']
         self.n_length = self.d['i_size']
         self.mode = self.d['i_mode']
         self.nlink = self.d['i_links_count']
+
+        self.block_list = self._build_block_list(fs)
+
+    def _build_block_list(self, fs):
+        ''' return list of absolute block addresses for the inode '''
+        def list_of_indirects(ib):
+            bl = []
+            for i in xrange( fs._blksz / struct.intsz ):
+                bn = unpack_int_at(ib, i)
+                if bn is 0: return bl
+                bl.append(bn)
+            return bl
+
+        def list_of_double_indirects(self, dib):
+            dibl = []
+            for i in xrange( fs._blksz / struct.intsz ):
+                ibn = unpack_int_at(dib, i)
+                if ibn is 0: return dibl
+                ib = fs._read_block(ibn)
+                dibl.extend( list_of_indirects(ib) )
+            return dibl
+
+        blocks = []
+        for i in range( e2inode.EXT2_NDIR_BLOCKS ):
+            block_num = self.d['i_db' + str(i)]
+            if block_num == 0: return blocks
+            blocks.append(block_num)
+
+        i1b_num = self.d['i_i1b']
+        if i1b_num is 0: return blocks
+        i1b = fs._read_block(i1b_num)
+        blocks.extend( list_of_indirects(i1b) )
+
+        i2b_num = self.d['i_i2b']
+        if i2b_num is 0: return blocks
+        i2b = fs._read_block(i2b_num)
+        blocks.extend( list_of_double_indirects(i2b) )
+
+        i3b_num = self.d['i_i3b']
+        if i3b_num is 0: return blocks
+        i3b = fs._read_block(i3b_num)
+        for i in xrange( fs._blksz / struct.intsz ):
+            dibn = unpack_int_at(i3b, i)
+            if dibn is 0: return blocks
+            dib = fs._read_block(dibn)
+            blocks.extend( list_of_double_indirects(dib) )
+
+        print 'it''s kinda strange to reach this point, is the inode really that long?'
+        return blocks
 
     def get_mode(self):
         rights = ''
@@ -152,14 +207,12 @@ class e2inode:
     def is_device(self):
         return stat.S_IFMT(self.mode) in (stat.S_IFCHR, stat.S_IFBLK)
 
-    def blocks_list(self):
-        blocks = []
-        for i in range( e2inode.EXT2_N_BLOCKS ):
-            block_num = self.d['i_db' + str(i)]
-            if block_num == 0: return blocks
-            blocks.append(block_num)
+    def block_at(self, fileblock):
+        ''' absolute block number from relative in-file block number '''
+        return self._block_list[fileblock]
 
-        return blocks
+    def get_block_list(self):
+        return self.block_list
 
     def blocks_as_string(self):
         """ this method is used for reading in-place links, up to 60 chars """
@@ -396,7 +449,7 @@ class ext2fs:
 
         bytes_written = 0
         destination = open(to_file, 'w')
-        for block in inode.blocks_list():
+        for block in inode.get_block_list():
             bytes_to_copy = min(inode.n_length - bytes_written, self._blksz)
             if bytes_to_copy <= 0:
                 raise Ext2Exception('Redundant blocks in file %s' % path)
@@ -406,6 +459,37 @@ class ext2fs:
             destination.write( piece )
             bytes_written += bytes_to_copy
         destination.close()
+
+    def read(self, fspath, offset, bytes_count):
+        if bytes_count <= 0 or offset < 0: return ''
+
+        inode = self._inode_by_path(fspath)
+
+        end_offset = offset + bytes_count
+        if end_offset > inode.n_length:
+            end_offset = inode.n_length
+            bytes_count = inode.n_length - offset
+
+        start_fileblock = offset / self._blksz
+        end_fileblock = (end_offset - 1) / self._blksz
+
+        start_block_offset = offset % self._blksz
+        start_block = inode.block_at(start_fileblock)
+        contents = self._read_block( start_block )[start_block_offset:]
+        if start_block_offset + bytes_count <= self._blksz:
+            return contents[:bytes_count]
+
+        for i in range(start_fileblock + 1, end_fileblock):
+            block_contents = self._read_block( inode.block_at(i) )
+            contents += block_contents
+
+        end_block_bytes = end_offset % self._blksz
+        if end_block_bytes is 0: end_block_bytes = self._blksz
+        end_block = inode.block_at(end_fileblock)
+        end_contents = self._read_block( end_block )[:end_block_bytes]
+        contents += end_contents
+
+        return contents
 
     def readlink(self, path):
         inode = self._inode_by_path(path)
