@@ -84,8 +84,15 @@ class e2fuse(fuse.Fuse):
 
     def read(self, path, size, offset):
         self.log('read(%s, %d, %d)' % (path, size, offset))
-        try: return self.fs.read(path, offset, size)
-        except Exception:
+        try:
+            buf = self.fs.read(path, offset, size)
+            self.log('  %d bytes read' % len(buf))
+            return buf
+        except Ext2Exception as e:
+            self.log('  Ext2Exception: ' + e.msg)
+            return ''
+        except Exception as e:
+            self.log('  Exception: ' + e.msg)
             return ''
 
     def write(self, path, buf, offset):
@@ -94,18 +101,24 @@ class e2fuse(fuse.Fuse):
         return -errno.ENOSYS
 
     def release(self, path, flags):
-        return -errno.ENOSYS
+        return 0
 
     def open(self, path, flags):
-        self.log('open(%s)' % path)
-        return -errno.ENOSYS
+        self.log('open(%s, 0x%x)' % (path, flags))
+        return 0 #-errno.ENOSYS
 
     def access(self, path, mode):
         self.log('access(%s, 0%o)' % (path, mode))
-        try: ino = self.fs._inode_by_path(path)
-        except Exception:
+        try: 
+            ino = self.fs._inode_by_path(path)
+            self.log('  - granted')
+            return True
+        except Ext2Exception as e:
+            self.log('  Ext2Exception: ' + e.msg)
             return False
-        return True
+        except Exception as e:
+            self.log('  Exception: ' + e.msg)
+            return False
 
     def truncate(self, path, size):
         self.log('truncate(%s, %d)' % (path, size))
@@ -113,6 +126,7 @@ class e2fuse(fuse.Fuse):
         return -errno.ENOSYS
 
     def utime(self, path, times):
+        if self.ro: return -errno.EROFS
         return -errno.ENOSYS
 
     def mkdir(self, path, mode):
