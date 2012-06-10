@@ -9,16 +9,18 @@ from ext2 import *
 
 fuse.fuse_python_api = (0, 2)
 
+logfile = '/tmp/e2fuse.log'
+
 usage = '''
 ext2 fuse filesystem
 Usage:
-$ e2fuse.py <image/file> <mount/dir>
+$ e2fuse.py </image/file> </mount/dir>
 ''' + fuse.Fuse.fusage
 
 class e2fuse(fuse.Fuse):
     def __init__(self, *args, **kw):
         fuse.Fuse.__init__(self, *args, **kw)
-        self.logfile = open('/tmp/e2fuse.log', 'w')
+        self.logfile = open(logfile, 'w')
         self.log('Starting e2fuse...')
 
     def fsinit(self):
@@ -33,6 +35,7 @@ class e2fuse(fuse.Fuse):
 
     def fsdestroy(self):
         self.log('fsdestoy()')
+        self.fs.umount()
 
     def log(self, msg):
         self.logfile.write(msg + '\n')
