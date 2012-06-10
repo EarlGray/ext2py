@@ -41,7 +41,7 @@ class e2fuse(fuse.Fuse):
         self.log('getattr("%s")' % path)
         try: ent = self.fs._ent_by_path(path)
         except Ext2Exception:
-            self.log('getattr: no "%s"' % path)
+            self.log('  no "%s"' % path)
             return -errno.ENOENT
 
         self.log('  inode = %d' % ent.inode)
@@ -79,6 +79,10 @@ class e2fuse(fuse.Fuse):
         self.log('opendir(%s)' % path)
         return 0 #-errno.ENOSYS
 
+    def releasedir(self, path):
+        self.log('releasedir(%s)' % path)
+        return 0 #-errno.ENOSYS
+
     def mknod(self, path, mode, dev):
         self.log('mknod("%s", %o, %d")' % (path, mode, dev))
         if self.ro: return -errno.EROFS
@@ -96,10 +100,10 @@ class e2fuse(fuse.Fuse):
             self.log('  %d bytes read' % len(buf))
             return buf
         except Ext2Exception as e:
-            self.log('  Ext2Exception: ' + e.msg)
+            self.log('  Ext2Exception: %s' % e.msg)
             return ''
         except Exception as e:
-            self.log('  Exception: ' + e.msg)
+            self.log('  Exception: %s' % e.msg)
             return ''
 
     def write(self, path, buf, offset):
@@ -114,11 +118,16 @@ class e2fuse(fuse.Fuse):
         self.log('open(%s, 0x%x)' % (path, flags))
         return 0 #-errno.ENOSYS
 
+    def create(self, path, mode):
+        self.log('create(%s, 0%o' % (path, mode))
+        if self.ro: return -errno.EROFS
+        return 0
+
     def access(self, path, mode):
         self.log('access(%s, 0%o)' % (path, mode))
-        try: 
+        try:
             ino = self.fs._inode_by_path(path)
-            self.log('  - granted')
+            #self.log('  - granted')
             return 0
         except Ext2Exception as e:
             self.log('  Ext2Exception: ' + e.msg)
@@ -129,6 +138,11 @@ class e2fuse(fuse.Fuse):
 
     def truncate(self, path, size):
         self.log('truncate(%s, %d)' % (path, size))
+        if self.ro: return -errno.EROFS
+        return -errno.ENOSYS
+
+    def ftruncate(self, fd, size):
+        self.log('ftruncate(%d, %d)' % (fd, size))
         if self.ro: return -errno.EROFS
         return -errno.ENOSYS
 
@@ -183,12 +197,28 @@ class e2fuse(fuse.Fuse):
         self.log('readlink("%s") = %s' % (path, link))
         return link
 
+    def lock(self, path):
+        self.log('lock(%s)' % path)
+        return -errno.ENOSYS
+
+    def bmap(self, path):
+        self.log('bmap(%s)' % path)
+        return -errno.ENOSYS
+
     def statvfs(self):
         self.log('statvfs()')
         return -errno.ENOSYS
 
     def statfs(self, path):
         self.log('statfs(%s)' % path)
+        return -errno.ENOSYS
+
+    def getxattr(self, path):
+        self.log('getxattr(%s)' % path)
+        return -errno.ENOSYS
+
+    def listxattr(self, path):
+        self.log('listxattr(%s)' % path)
         return -errno.ENOSYS
 
 

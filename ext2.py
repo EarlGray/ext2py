@@ -209,7 +209,7 @@ class e2inode:
 
     def block_at(self, fileblock):
         ''' absolute block number from relative in-file block number '''
-        return self._block_list[fileblock]
+        return self.block_list[fileblock]
 
     def get_block_list(self):
         return self.block_list
