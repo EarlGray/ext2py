@@ -31,6 +31,9 @@ class e2fuse(fuse.Fuse):
         except Exception:
             self.log('ext2fs(%s) failed' % imgf);
 
+    def fsdestroy(self):
+        self.log('fsdestoy()')
+
     def log(self, msg):
         self.logfile.write(msg + '\n')
 
@@ -71,6 +74,10 @@ class e2fuse(fuse.Fuse):
         self.log('  entries: %s' % str(dirents))
         for r in dirents:
             yield fuse.Direntry(r)
+
+    def opendir(self, path):
+        self.log('opendir(%s)' % path)
+        return -errno.ENOSYS
 
     def mknod(self, path, mode, dev):
         self.log('mknod("%s", %o, %d")' % (path, mode, dev))
@@ -130,8 +137,27 @@ class e2fuse(fuse.Fuse):
         if self.ro: return -errno.EROFS
         return -errno.ENOSYS
 
+    def chown(self, path, uid, gid):
+        self.log('chown(%s, %d:%d)' % (path, uid, gid))
+        if self.ro: return -errno.EROFS
+        return -errno.ENOSYS
+
+    def chmod(self, path, mode):
+        self.log('chmod(%s, 0%o)' % (path, mode))
+        if self.ro: return -errno.EROFS
+        return -errno.ENOSYS
+
     def fsync(self, path, isfsyncfile):
         self.log('fsync(%s)' % path)
+        if self.ro: return -errno.EROFS
+        return -errno.ENOSYS
+
+    def flush(self, path):
+        self.log('flush(%s)' % path)
+        if self.ro: return -errno.EROFS
+        return -errno.ENOSYS
+
+    def link(self, ):
         if self.ro: return -errno.EROFS
         return -errno.ENOSYS
 
