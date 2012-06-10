@@ -77,7 +77,7 @@ class e2fuse(fuse.Fuse):
 
     def opendir(self, path):
         self.log('opendir(%s)' % path)
-        return -errno.ENOSYS
+        return 0 #-errno.ENOSYS
 
     def mknod(self, path, mode, dev):
         self.log('mknod("%s", %o, %d")' % (path, mode, dev))
@@ -119,7 +119,7 @@ class e2fuse(fuse.Fuse):
         try: 
             ino = self.fs._inode_by_path(path)
             self.log('  - granted')
-            return True
+            return 0
         except Ext2Exception as e:
             self.log('  Ext2Exception: ' + e.msg)
             return False
@@ -168,8 +168,7 @@ class e2fuse(fuse.Fuse):
 
     def flush(self, path):
         self.log('flush(%s)' % path)
-        if self.ro: return -errno.EROFS
-        return -errno.ENOSYS
+        return 0
 
     def link(self, ):
         if self.ro: return -errno.EROFS
