@@ -121,7 +121,7 @@ class e2fuse(fuse.Fuse):
         self.log('open(%s, 0x%x)' % (path, flags))
         return 0 #-errno.ENOSYS
 
-    def create(self, path, mode):
+    def create(self, path, mode, umask):
         self.log('create(%s, 0%o' % (path, mode))
         if self.ro: return -errno.EROFS
         return 0
@@ -200,8 +200,8 @@ class e2fuse(fuse.Fuse):
         self.log('readlink("%s") = %s' % (path, link))
         return link
 
-    def lock(self, path):
-        self.log('lock(%s)' % path)
+    def lock(self, l_type, l_whence, v2, name, l_start, l_len, l_pid):
+        self.log('lock(%s, %d, %d, %d)' % path, start, length, pid)
         return -errno.ENOSYS
 
     def bmap(self, path):
@@ -216,8 +216,8 @@ class e2fuse(fuse.Fuse):
         self.log('statfs(%s)' % path)
         return -errno.ENOSYS
 
-    def getxattr(self, path):
-        self.log('getxattr(%s)' % path)
+    def getxattr(self, path, name, param1):
+        self.log('getxattr(%s, %s, %d)' % (path, name, param1))
         return -errno.ENOSYS
 
     def listxattr(self, path):
