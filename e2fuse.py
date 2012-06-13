@@ -212,9 +212,21 @@ class e2fuse(fuse.Fuse):
         self.log('statvfs()')
         return -errno.ENOSYS
 
-    def statfs(self, path):
-        self.log('statfs(%s)' % path)
-        return -errno.ENOSYS
+    def statfs(self):
+        self.log('statfs()')
+
+        st = fuse.StatVfs()
+        st.f_bsize = self.fs._blksz
+        st.f_blocks = self.fs.d['s_blocks_count']
+        st.f_bfree = self.fs.d['s_free_blocks_count']
+        st.f_bavail = self.fs.d['s_free_blocks_count'] - self.fs.d['s_r_blocks_count']
+        st.f_files = self.fs.d['s_inodes_count']
+        st.f_ffree = self.fs.d['s_free_inodes_count']
+        st.f_frsize = 0
+        st.f_flag = 0
+        st.f_namemax = 256
+
+        return st
 
     def getxattr(self, path, name, param1):
         self.log('getxattr(%s, %s, %d)' % (path, name, param1))

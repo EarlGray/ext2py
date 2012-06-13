@@ -144,7 +144,8 @@ class e2inode:
         self.mode = self.d['i_mode']
         self.nlink = self.d['i_links_count']
 
-        self.block_list = self._build_block_list(fs)
+        if not self.is_short_link():
+            self.block_list = self._build_block_list(fs)
 
     def _build_block_list(self, fs):
         ''' return list of absolute block addresses for the inode '''
@@ -206,6 +207,12 @@ class e2inode:
 
     def is_device(self):
         return stat.S_IFMT(self.mode) in (stat.S_IFCHR, stat.S_IFBLK)
+
+    def is_link(self):
+        return stat.S_IFMT(self.mode) == stat.S_IFLNK
+
+    def is_short_link(self):
+        return self.is_link() and self.n_length <= struct.intsz * self.EXT2_N_BLOCKS
 
     def block_at(self, fileblock):
         ''' absolute block number from relative in-file block number '''
@@ -493,12 +500,12 @@ class ext2fs:
 
     def readlink(self, path):
         inode = self._inode_by_path(path)
-        if inode.n_length <= struct.calcsize('I') * e2inode.EXT2_N_BLOCKS:
+        if inode.is_short_link():
             # in-place link, less than or equal to 60 characters
             return inode.blocks_as_string()
         #else: long link with its own blocks
         s = ''
-        for b in inode.blocks_list():
+        for b in inode.get_block_list():
             sb = self._read_block(b)
             s += sb.split('\0')[0]
             if sb.count('\0'): break
