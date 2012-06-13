@@ -1,10 +1,20 @@
        --- The slowest ext2 driver ever ---
 
-This is a collection of low-level classes for inspecting ext2 
+This is a FUSE ext2 implementation in Python. Now it support read-only 
+mounting only:
+    $ ./e2fuse.py ext2.img mnt_dir 
+Works on Linux and OS X (fuse4x).
+
+Class ext2fs tries to provide user-friendly and abstract interface to 
+filesystem manipulation routines:
+    >>> from ext2 import *
+    >>> fs = ext2fs('ext2.img')
+    >>> fs.ls('/')
+    >>> fs.free_space_bytes()
+
+Also this is a collection of low-level classes for inspecting ext2
 internals. In order to use it effectively you need understanding
 the ext2 data layout. The main goal of this tool is to be a tool 
 for manual manipulation on an ext2 filesystem (possibly broken or 
 nonstandard).
 
-Class ext2fs tries to provide user-friendly and abstract interface to 
-filesystem manipulation routines. 

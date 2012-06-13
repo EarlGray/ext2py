@@ -403,10 +403,10 @@ class ext2fs:
         return dentry
 
     def _inode_by_path(self, pathto):
+        """ return e2inode for path 'pathto' """
         if pathto == '/':
             return self.root
 
-        """ return e2inode for path 'pathto' """
         path_array = pathto.split('/')
         while path_array.count(''): path_array.remove('')
 
@@ -422,6 +422,13 @@ class ext2fs:
     def _dir_by_inode(self, ino_num):
         return e2directory(self, self._inode(ino_num))
 
+    def free_space_bytes(self):
+        return self.sb.n_free_blocks * self._blksz
+
+    def space_bytes(self):
+        return self.sb.n_blocks * self._blksz
+
+    def ls(self, pathname, opts=''):
         """ lists files in 'pathname' like 'ls -l'
             The second argument controls listing format, options:
             'i' - output inodes, e.g. fs.ls('dir/subdir', 'i')
@@ -452,9 +459,9 @@ class ext2fs:
         for block in inode.get_block_list():
             bytes_to_copy = min(inode.n_length - bytes_written, self._blksz)
             if bytes_to_copy <= 0:
-                raise Ext2Exception('Redundant blocks in file %s' % path)
                 destination.close()
                 os.remove(to_file)
+                raise Ext2Exception('Redundant blocks in file %s' % path)
             piece = self._read_block(block)[:bytes_to_copy]
             destination.write( piece )
             bytes_written += bytes_to_copy
@@ -504,7 +511,7 @@ class ext2fs:
             if sb.count('\0'): break
         return s
 
-    def push_file(self, from_file, to_fspath):
+    def push(self, from_file, to_fspath):
         """ write an external file 'from_file' to ext2 path 'fspath' """
         ### TODO
         pass
