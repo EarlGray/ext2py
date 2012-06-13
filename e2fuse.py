@@ -3,6 +3,7 @@
 import os
 import errno
 import sys
+import posix
 import fuse
 
 from ext2 import *
@@ -24,6 +25,10 @@ class e2fuse(fuse.Fuse):
         self.log('Starting e2fuse...')
 
     def fsinit(self):
+        if not hasattr(self, 'fs'):
+            self._mount()
+
+    def _mount(self):
         self.ro = self.conf['ro']
         imgf = self.cmdline[1][0]
         if imgf[0] is not '/': imgf = self.cwd + '/' + imgf
@@ -209,21 +214,19 @@ class e2fuse(fuse.Fuse):
         return -errno.ENOSYS
 
     def statvfs(self):
-        self.log('statvfs()')
-        return -errno.ENOSYS
-
-    def statfs(self):
         self.log('statfs()')
+        if not hasattr(self, 'fs'):
+            self._mount()
 
         st = fuse.StatVfs()
         st.f_bsize = self.fs._blksz
-        st.f_blocks = self.fs.d['s_blocks_count']
-        st.f_bfree = self.fs.d['s_free_blocks_count']
-        st.f_bavail = self.fs.d['s_free_blocks_count'] - self.fs.d['s_r_blocks_count']
-        st.f_files = self.fs.d['s_inodes_count']
-        st.f_ffree = self.fs.d['s_free_inodes_count']
+        st.f_blocks = self.fs.sb.d['s_blocks_count']
+        st.f_bfree = self.fs.sb.d['s_free_blocks_count']
+        st.f_bavail = self.fs.sb.d['s_free_blocks_count'] - self.fs.sb.d['s_r_blocks_count']
+        st.f_files = self.fs.sb.d['s_inodes_count']
+        st.f_ffree = self.fs.sb.d['s_free_inodes_count']
         st.f_frsize = 0
-        st.f_flag = 0
+        # if self.ro: st.f_flag = posix.ST_RDONLY
         st.f_namemax = 256
 
         return st
@@ -248,7 +251,8 @@ def main(argv):
     fsserv.conf['ro'] = True
     fsserv.conf['user'] = ('user' in fsserv.fuse_args.optlist)
 
-    try: print fsserv.fuse_args.mount_expected()
+    try:
+        print fsserv.fuse_args.mount_expected()
     except OSError:
         print >> sys.stderr, "Mount expected failed"
         sys.exit(-1)

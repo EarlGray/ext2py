@@ -422,13 +422,6 @@ class ext2fs:
     def _dir_by_inode(self, ino_num):
         return e2directory(self, self._inode(ino_num))
 
-    def free_space_bytes(self):
-        return self.sb.n_free_blocks * self._blksz
-
-    def space_bytes(self):
-        return self.sb.n_blocks * self._blksz
-
-    def ls(self, pathname, opts=''):
         """ lists files in 'pathname' like 'ls -l'
             The second argument controls listing format, options:
             'i' - output inodes, e.g. fs.ls('dir/subdir', 'i')
@@ -500,12 +493,12 @@ class ext2fs:
 
     def readlink(self, path):
         inode = self._inode_by_path(path)
-        if inode.is_short_link():
+        if inode.n_length <= struct.calcsize('I') * e2inode.EXT2_N_BLOCKS:
             # in-place link, less than or equal to 60 characters
             return inode.blocks_as_string()
         #else: long link with its own blocks
         s = ''
-        for b in inode.get_block_list():
+        for b in inode.blocks_list():
             sb = self._read_block(b)
             s += sb.split('\0')[0]
             if sb.count('\0'): break
