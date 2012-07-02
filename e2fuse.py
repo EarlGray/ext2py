@@ -35,8 +35,8 @@ class e2fuse(fuse.Fuse):
         try:
             self.fs = ext2fs(imgf)
             self.log('mounted successfully')
-        except Exception:
-            self.log('ext2fs(%s) failed' % imgf);
+        except Exception as e:
+            self.log('ext2fs(%s) failed: %s' % (imgf, e.message));
 
     def fsdestroy(self):
         self.log('fsdestoy()')
@@ -73,8 +73,8 @@ class e2fuse(fuse.Fuse):
 
     def readdir(self, path, offset):
         self.log('readdir("%s")' % path)
-        dir_ino = self.fs._inode_by_path(path)
-        d = e2directory(self.fs, dir_ino)
+        dir_dentry = self.fs._ent_by_path(path)
+        d = self.fs._dir_by_inode(dir_dentry.inode)
 
         dirents = []
         for de in d.ent: dirents.append(de.name)
@@ -108,10 +108,10 @@ class e2fuse(fuse.Fuse):
             self.log('  %d bytes read' % len(buf))
             return buf
         except Ext2Exception as e:
-            self.log('  Ext2Exception: %s' % e.msg)
+            self.log('  Ext2Exception: %s' % e.message)
             return ''
         except Exception as e:
-            self.log('  Exception: %s' % e.msg)
+            self.log('  Exception: %s' % e.message)
             return ''
 
     def write(self, path, buf, offset):
@@ -138,10 +138,10 @@ class e2fuse(fuse.Fuse):
             #self.log('  - granted')
             return 0
         except Ext2Exception as e:
-            self.log('  Ext2Exception: ' + e.msg)
+            self.log('  Ext2Exception: ' + e.message)
             return False
         except Exception as e:
-            self.log('  Exception: ' + e.msg)
+            self.log('  Exception: ' + e.message)
             return False
 
     def truncate(self, path, size):
@@ -206,7 +206,7 @@ class e2fuse(fuse.Fuse):
         return link
 
     def lock(self, l_type, l_whence, v2, name, l_start, l_len, l_pid):
-        self.log('lock(%s, %d, %d, %d)' % path, start, length, pid)
+        self.log('lock(%s, %d, %d, %d)' % (path, start, length, pid))
         return -errno.ENOSYS
 
     def bmap(self, path):
