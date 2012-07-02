@@ -68,7 +68,7 @@ class Ext2Exception(Exception):
     def __str__(self):
         return self.msg
 
-class ImageIO:
+class E2IO:
     def __init__(self, source):
         self.f = open(source)
         # self.blksz must be read from the file, so setting it later:
@@ -378,7 +378,7 @@ class ext2fs:
     """ an ext2fs object represents a mounted ext2 file system.
     """
     def __init__(self, filename):
-        self.io = ImageIO(filename)
+        self.io = E2IO(filename)
         self.sb = e2superblock(self.io)
 
         self._blksz = self.sb.block_size()
