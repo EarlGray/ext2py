@@ -538,15 +538,41 @@ class ext2fs:
         ### TODO
         pass
 
+def usage():
+    print 'Usage: %s /path/to/ext2/img/or/device> <action>' % sys.argv[0]
+    print '<action>s:'
+    print '   info'
+    print '   ls <path>'
+    print '   cp <from/image> <outside/file>'
+
 if '__main__' == __name__:
     import sys
-    if len(sys.argv) < 2:
-        print 'Usage: %s /path/to/ext2/img/or/device>' % sys.argv[0]
+    if len(sys.argv) < 3:
+        usage()
         sys.exit(-1)
 
     imgfile = sys.argv[1]
-    try: e2fs = ext2fs(imgfile)
+    try: 
+        e2fs = ext2fs(imgfile)
     except IOError:
         print 'No such file: %s' % imgfile
         sys.exit(-2)
+
+    if sys.argv[2] == 'info':
+        if e2fs.sb.d['s_state'] > 1: print 'State: %d' % e2fs.sb.d['s_state']
+        print('UUID: %s, Label: "%s"' % (e2fs.sb.uuid.__str__, e2fs.sb.name))
+        print('Total space: %d, free space: %d bytes' % (e2fs.space_bytes(), e2fs.free_space_bytes()))
+        print('Block size: %d' % e2fs.sb.block_size())
+        print('Total inodes: %d, free inodes: %d' % (e2fs.sb.n_inodes, e2fs.sb.n_free_inodes))
+        print('Last mounted: %s' % time_format(e2fs.sb.d['s_last_mounted']))
+        print('Mounted %d times without check, checked every %d time' % (e2fs.sb.d['s_mnt_count'], e2fs.sb.d['s_max_mnt_count']))
+        print('last checked %s, check interval is %d' % (time_format(e2fs.sb.d['s_lastcheck']), time_format(e2fs.sb.d['s_checkinterval'])))
+        print('')
+    elif sys.argv[2] == 'ls':
+        if len(sys.argv) < 4: usage()
+        else: e2fs.ls(sys.argv[3])
+    elif sys.argv[2] == 'cp':
+        if len(sys.argv) < 5: usage()
+        else: e2fs.pull(sys.argv[3], sys.argv[4])
+    else: usage()
 
