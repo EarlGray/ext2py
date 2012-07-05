@@ -205,7 +205,7 @@ class e2fuse(fuse.Fuse):
         self.log('readlink("%s") = %s' % (path, link))
         return link
 
-    #def lock(self, l_type, l_whence, v2, name, l_start, l_len, l_pid):
+    #def lock(self, l_type, l_start, l_end, l_pid, l_owner, l_len, l_pid):
     #    self.log('lock(%s, %d, %d, %d)' % (path, start, length, pid))
     #    return -errno.ENOSYS
 

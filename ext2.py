@@ -70,6 +70,7 @@ class E2IO:
     def __init__(self, source):
         self.f = open(source)
         self._lock = T.Lock()
+        self._b_lock = T.Lock()
         # self.blksz must be read from the file, so setting it later:
 
     def set_blksz(self, blksz):
@@ -79,15 +80,24 @@ class E2IO:
         self.f.close()
 
     def read_block(self, block_num):
+        self._b_lock.acquire()
         self._go_to_block(block_num)
-        return self.f.read(self.blksz)
+        buf = self.f.read(self.blksz)
+        self._b_lock.release()
+        return buf
 
     def read(self, count):
-        return self.f.read(count)
+        self._b_lock.acquire()
+        buf = self.f.read(count)
+        self._b_lock.release()
+        return buf
 
     def read_at(self, count, offset=0, whence=os.SEEK_SET):
+        self._b_lock.acquire()
         self.f.seek(offset, whence)
-        return self.f.read(count)
+        buf = self.f.read(count)
+        self._b_lock.release()
+        return buf
 
     def lock(self): self._lock.acquire()
     def unlock(self): self._lock.release()
@@ -164,7 +174,8 @@ class e2inode:
     EXT2_NDIR_BLOCKS = 12
     EXT2_N_BLOCKS = 15
 
-    def __init__(self, io, offset, inosz):
+    def __init__(self, ino_num, io, offset, inosz):
+        self.index = ino_num
         self.i_size = inosz
         byte_array = io.read_at(self.i_size, offset)
         self.d = unpack_struct(self.i_fmt, self.i_flds, byte_array)
@@ -247,7 +258,10 @@ class e2inode:
 
     def block_at(self, fileblock):
         ''' absolute block number from relative in-file block number '''
-        return self.block_list[fileblock]
+        try: return self.block_list[fileblock]
+        except IndexError as e:
+            raise Ext2Exception(
+                'Invalid file block number %d for inode %d' % (fileblock, self.index))
 
     def get_block_list(self):
         return self.block_list
@@ -406,7 +420,7 @@ class ext2fs:
         bg = self._bgd[ (ino_num - 1) / self.sb.inodes_in_grp ]
         offset =  bg.inode_table * self._blksz   # go to inode table
         offset += group_index * self._indsz
-        return e2inode(self.io, offset, self._indsz)
+        return e2inode(ino_num, self.io, offset, self._indsz)
 
     def _ent_by_path(self, pathto):
         if pathto == '/':
