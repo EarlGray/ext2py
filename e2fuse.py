@@ -110,9 +110,9 @@ class e2fuse(fuse.Fuse):
         except Ext2Exception as e:
             self.log('  Ext2Exception: %s' % e.message)
             return ''
-        except Exception as e:
-            self.log('  Exception: %s' % e.message)
-            return ''
+        #except Exception as e:
+        #    self.log('  Exception: %s' % e.message)
+        #    return ''
 
     def write(self, path, buf, offset):
         self.log('write(%s, %d, %d)' % (path, len(buf), offset))
@@ -205,9 +205,9 @@ class e2fuse(fuse.Fuse):
         self.log('readlink("%s") = %s' % (path, link))
         return link
 
-    def lock(self, l_type, l_whence, v2, name, l_start, l_len, l_pid):
-        self.log('lock(%s, %d, %d, %d)' % (path, start, length, pid))
-        return -errno.ENOSYS
+    #def lock(self, l_type, l_whence, v2, name, l_start, l_len, l_pid):
+    #    self.log('lock(%s, %d, %d, %d)' % (path, start, length, pid))
+    #    return -errno.ENOSYS
 
     def bmap(self, path):
         self.log('bmap(%s)' % path)

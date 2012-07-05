@@ -109,17 +109,18 @@ class e2dentry:
         byte_array = io.read_at( self.fmt_size, offset )
         self.d = unpack_struct(self.d_fmt, self.d_flds, byte_array)
         self.inode = self.d['d_inode']
+        self.size = self.d['d_entry_size']
 
-        raw_name_size = self.d['d_entry_size'] - struct.calcsize(self.d_fmt)
-        raw_name = io.read( raw_name_size )
+        raw_name_size = self.size - struct.calcsize(self.d_fmt)
+        self.name = io.read( raw_name_size )
         io.unlock()
-        self.name = struct.unpack(str(raw_name_size) + 's', raw_name)[0]
+        #self.name = struct.unpack(str(raw_name_size) + 's', raw_name)[0]
         self.name = self.name.strip('\0')[ : self.d['d_namelen'] ]
 
         try: self.ftype = self.stattype[ self.d['d_filetype'] ]
-        except KeyError:
+        except IndexError:
             raise Ext2Exception(
-                'Invalid file type %d for dentry %s' % (e.ftype, e.name))
+                'Invalid file type %d for dentry %s' % (self.d['d_filetype'], self.name))
 
 
 class e2directory:
@@ -130,7 +131,7 @@ class e2directory:
         self.ent = []
         bytes_read = 0
         while bytes_read < io.blksz:
-            offset = (inode.d['i_db0'] * io.blksz) + bytes_read
+            offset = (inode.block_at(0) * io.blksz) + bytes_read
             e = e2dentry(io, offset)
             self.ent.append( e )
             bytes_read += e.d['d_entry_size']
@@ -188,7 +189,7 @@ class e2inode:
                 bl.append(bn)
             return bl
 
-        def list_of_double_indirects(self, dib):
+        def list_of_double_indirects(dib):
             dibl = []
             for i in xrange( io.blksz / struct.intsz ):
                 ibn = unpack_int_at(dib, i)
