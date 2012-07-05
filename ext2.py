@@ -42,6 +42,7 @@ import stat
 import time
 import uuid
 import os
+import threading as T
 
 stat_full_rights = 'rwxrwxrwx'
 stat_filetype = {
@@ -63,14 +64,12 @@ def time_format(unix_time):
     return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(unix_time))
 
 class Ext2Exception(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-    def __str__(self):
-        return self.msg
+    pass
 
 class E2IO:
     def __init__(self, source):
         self.f = open(source)
+        self._lock = T.Lock()
         # self.blksz must be read from the file, so setting it later:
 
     def set_blksz(self, blksz):
@@ -90,8 +89,8 @@ class E2IO:
         self.f.seek(offset, whence)
         return self.f.read(count)
 
-    def lock(self): pass   # TODO: add muteces here
-    def unlock(self): pass
+    def lock(self): self._lock.acquire()
+    def unlock(self): self._lock.release()
 
     def _go_to_block(self, block_num):
         self.f.seek(block_num * self.blksz)
@@ -114,13 +113,13 @@ class e2dentry:
         raw_name_size = self.size - struct.calcsize(self.d_fmt)
         self.name = io.read( raw_name_size )
         io.unlock()
-        #self.name = struct.unpack(str(raw_name_size) + 's', raw_name)[0]
-        self.name = self.name.strip('\0')[ : self.d['d_namelen'] ]
+        self.name = self.name[ : self.d['d_namelen'] ]
 
         try: self.ftype = self.stattype[ self.d['d_filetype'] ]
         except IndexError:
             raise Ext2Exception(
-                'Invalid file type %d for dentry %s' % (self.d['d_filetype'], self.name))
+                'Invalid file type %d for dentry %s' %
+                    (self.d['d_filetype'], self.name))
 
 
 class e2directory:
@@ -502,7 +501,7 @@ class ext2fs:
             bytes_count = inode.n_length - offset
 
         start_fileblock = offset / self._blksz
-        end_fileblock = (end_offset - 1) / self._blksz
+        end_fileblock = end_offset / self._blksz
 
         start_block_offset = offset % self._blksz
         start_block = inode.block_at(start_fileblock)
@@ -511,14 +510,12 @@ class ext2fs:
             return contents[:bytes_count]
 
         for i in range(start_fileblock + 1, end_fileblock):
-            block_contents = self.io.read_block( inode.block_at(i) )
-            contents += block_contents
+            contents += self.io.read_block( inode.block_at(i) )
 
         end_block_bytes = end_offset % self._blksz
-        if end_block_bytes is 0: end_block_bytes = self._blksz
-        end_block = inode.block_at(end_fileblock)
-        end_contents = self.io.read_block( end_block )[:end_block_bytes]
-        contents += end_contents
+        if end_block_bytes:
+            end_block = inode.block_at(end_fileblock)
+            contents += self.io.read_block( end_block )[:end_block_bytes]
 
         return contents
 
@@ -553,7 +550,7 @@ if '__main__' == __name__:
         sys.exit(-1)
 
     imgfile = sys.argv[1]
-    try: 
+    try:
         e2fs = ext2fs(imgfile)
     except IOError:
         print 'No such file: %s' % imgfile

@@ -235,7 +235,7 @@ class e2fuse(fuse.Fuse):
         self.log('getxattr(%s, %s, %d)' % (path, name, param1))
         return -errno.ENOSYS
 
-    def listxattr(self, path):
+    def listxattr(self, path, attr):
         self.log('listxattr(%s)' % path)
         return -errno.ENOSYS
 
