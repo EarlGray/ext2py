@@ -73,7 +73,7 @@ class Ext2Exception(Exception):
 
 class E2IO:
     def __init__(self, source):
-        self.f = open(source)
+        self.f = open(source, 'rb')
         self._lock = T.Lock()
         self._b_lock = T.Lock()
         # self.blksz must be read from the file, so setting it later:
@@ -523,7 +523,7 @@ class ext2fs:
             pass
 
         bytes_written = 0
-        destination = open(to_file, 'w')
+        destination = open(to_file, 'wb')
         for block in inode.get_block_list():
             bytes_to_copy = min(inode.n_length - bytes_written, self._blksz)
             if bytes_to_copy <= 0:
